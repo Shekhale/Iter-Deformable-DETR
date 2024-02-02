@@ -113,7 +113,7 @@ class Backbone(BackboneBase):
 class SwinTrBackbone(SwinTransformer):
     _config = {
         "swin-t": ("swin_tiny_patch4_window7_224.pth", 96, [2, 2, 6, 2], [3, 6, 12, 24], 7),
-        "swin-l": ("swin_large_patch4_window7_224_22k.pth", 192, [2, 2, 18, 2], [6, 12, 24, 48], 7),
+        "swin-l": ("/content/Iter-Deformable-DETR/swin_large_patch4_window7_224_22k.pth", 192, [2, 2, 18, 2], [6, 12, 24, 48], 7),
         "swin-l-384": ("swin_large_patch4_window12_384_22kto1k.pth", 192, [2, 2, 18, 2], [6, 12, 24, 48], 12),
     }
 

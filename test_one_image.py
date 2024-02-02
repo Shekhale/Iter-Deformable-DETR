@@ -18,8 +18,6 @@ import pdb
 import numpy as np
 from datasets.coco import make_coco_transforms
 from util.misc import nested_tensor_from_tensor_list
-import cv2
-import time
 
 
 def get_args_parser():
@@ -183,15 +181,13 @@ def main():
 
     # model_file = osp.join(model_dir, 'checkpoint-{}.pth'.format(epoch))
 
-
-    ### Model part
     model_file = args.frozen_weights
     # results = multi_process(processor, record, args.num_gpus, model_file, args)
 
     # torch.cuda.set_device(device)
-    # device = "cuda"
+    device = "cuda"
     model, _, postprocessors = build_model(args)
-    model.to(args.device)
+    model.to(device)
 
     model_without_ddp = model
     # dataset_val = construct_dataset(fpath, 'val', args)
@@ -208,90 +204,44 @@ def main():
     model_without_ddp.eval()
     transform_fn = make_coco_transforms("val")
     counter, thr = 0, 0.05
-
-    ### Video part
-    cap = cv2.VideoCapture(args.video_path)
-    width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # vis_folder = osp.join(args.output_dir, "track_vis")
-    vis_folder = args.output_dir
-    os.makedirs(vis_folder, exist_ok=True)
-
-    current_time = time.localtime()
-    timestamp = time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
-    save_folder = osp.join(vis_folder, timestamp)
-    os.makedirs(save_folder, exist_ok=True)
-    # save_path = osp.join(save_folder, args.video_path.split("/")[-1])
-
-    # data_processor = Data_Processor(height=224, width=224)
-    # reid_model = SwinTransformer(num_features=512)  # .cuda()
-    # weight_path = "/Users/shekhale/Downloads/swin_base_patch4_window7_224.pth"
-    # weight = torch.load(weight_path, map_location=torch.device('cpu'))
-    # reid_model.load_state_dict(weight['state_dict'], strict=True)
-    # reid_model.eval()
-    frame_id = 0
-    results = []
-    while True:
-        ret_val, frame = cap.read()
-        if ret_val and frame_id % 1 == 0:
-            outputs, img_info = process_frame(frame, model, transform_fn, postprocessors, args.device, [height, width],
-                                              thr)
-            if outputs[0] is not None:
-                scores = outputs['scores']
-                bboxes = outputs['boxes']
-                for i, b,s in enumerate(zip(bboxes, scores)):
-                    results.append(
-                        f"{frame_id},{i},{b[0]:.2f},{b[1]:.2f},{b[2]:.2f},{b[3]:.2f},{s:.2f},-1,-1,-1\n"
-                    )
-
-            ch = cv2.waitKey(1)
-            if ch == 27 or ch == ord("q") or ch == ord("Q"):
-                break
-        elif not ret_val:
-            break
-        frame_id += 1
-    #
-    # database = np.vstack(database)
-    # database_path = os.path.join(vis_folder, f"{timestamp}_database.npy")
-    # np.save(database_path, database)
-
-    # if args.save_result:
-    res_file = osp.join(vis_folder, f"{timestamp}.txt")
-    with open(res_file, 'w') as f:
-        f.writelines(results)
-
-
-def process_frame(sample, model, transform_fn, postprocessors, device, origin_size, res_thr):
-    # sample = load_image(args)
-    # origin_size = [frame.size[1], frame.size[0]]
+    sample = load_image(args)
+    origin_size = [sample.size[1], sample.size[0]]
     # sample = torch.tensor(np.asarray(load_image(args)))
     # sample = np.asarray(load_image(args))
-    # print(type(sample))
-
-    sample = Image.fromarray(sample)
+    print(type(sample))
     sample = transform_fn(sample)[0]
 
-    # print(sample.shape)
-    sample = sample.to(device)
-    # print(sample.shape)
+    print(sample.shape)
+    sample = sample.to(args.device)
+    print(sample.shape)
     # sample = torch.nested.nested_tensor([sample])
     sample = nested_tensor_from_tensor_list([sample])
 
     with torch.no_grad():
-        outputs = model(sample)
-    # print(type(outputs))
+        outputs = model_without_ddp(sample)  # .unsqueeze(0))
+    print(type(outputs))
 
-    orig_target_sizes = torch.stack([torch.tensor(origin_size)], dim=0).to(device)
+    orig_target_sizes = torch.stack([torch.tensor(origin_size)], dim=0).to(args.device)
     # orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
     results = postprocessors['bbox'](outputs, orig_target_sizes)
-    results = [deplicate(r, res_thr) for r in results]
-    # print(results)
+    results = [deplicate(r, thr) for r in results]
+    print(results)
 
     # targets = [{k:v.cpu().numpy() for k, v in t.items()} for t in targets]
     results = [{k: v.cpu().numpy() for k, v in r.items()} for r in results]
-    return results
+    # dtboxes = [np.hstack([r['boxes'], r['scores'][:, np.newaxis]]) for r in results]
+    # dtboxes = [boxes_dump(db) for db in dtboxes]
+    # res = [{'ID':name, 'dtboxes':db} for name, db in zip(filenames, dtboxes)]
+
+    #     targets = [{k: v.cpu().numpy() for k, v in t.items()} for t in targets]
+    #     results = [{k: v.cpu().numpy() for k, v in r.items()} for r in results]
+    #     dtboxes = [np.hstack([r['boxes'], r['scores'][:, np.newaxis]]) for r in results]
+    #     dtboxes = [boxes_dump(db) for db in dtboxes]
+    #     res = [{'ID': name, 'dtboxes': db} for name, db in zip(filenames, dtboxes)]
+    #     assert len(res) == 1
+    #     result_queue.put_nowait(res[0])
+    # os.remove(fpath)
+    # return result_list
 
 
 if __name__ == '__main__':
