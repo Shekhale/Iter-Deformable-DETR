@@ -149,6 +149,7 @@ def deplicate(record, thr):
 # import datasets.transforms as T
 import torchvision.transforms.functional as F
 from PIL import Image
+import os.path as osp
 
 
 # def make_coco_transforms():
@@ -185,7 +186,6 @@ def main():
 
     # model_file = osp.join(model_dir, 'checkpoint-{}.pth'.format(epoch))
 
-
     ### Model part
     model_file = args.frozen_weights
     # results = multi_process(processor, record, args.num_gpus, model_file, args)
@@ -209,7 +209,7 @@ def main():
     model_without_ddp.to(args.device)
     model_without_ddp.eval()
     transform_fn = make_coco_transforms("val")
-    counter, thr = 0, 0.05
+    counter, thr = 0, 0.1
 
     ### Video part
     cap = cv2.VideoCapture(args.video_path)
@@ -223,8 +223,8 @@ def main():
 
     current_time = time.localtime()
     timestamp = time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
-    save_folder = osp.join(vis_folder, timestamp)
-    os.makedirs(save_folder, exist_ok=True)
+    # save_folder = osp.join(vis_folder, timestamp)
+    # os.makedirs(save_folder, exist_ok=True)
     # save_path = osp.join(save_folder, args.video_path.split("/")[-1])
 
     # data_processor = Data_Processor(height=224, width=224)
@@ -238,12 +238,13 @@ def main():
     while True:
         ret_val, frame = cap.read()
         if ret_val and frame_id % 1 == 0:
-            outputs, img_info = process_frame(frame, model, transform_fn, postprocessors, args.device, [height, width],
-                                              thr)
-            if outputs[0] is not None:
+            outputs = process_frame(frame, model, transform_fn, postprocessors, args.device, [height, width],
+                                    thr)[0]
+            # print(outputs)
+            if outputs is not None:
                 scores = outputs['scores']
                 bboxes = outputs['boxes']
-                for i, b,s in enumerate(zip(bboxes, scores)):
+                for i, (b, s) in enumerate(zip(bboxes, scores)):
                     results.append(
                         f"{frame_id},{i},{b[0]:.2f},{b[1]:.2f},{b[2]:.2f},{b[3]:.2f},{s:.2f},-1,-1,-1\n"
                     )
@@ -263,6 +264,8 @@ def main():
     res_file = osp.join(vis_folder, f"{timestamp}.txt")
     with open(res_file, 'w') as f:
         f.writelines(results)
+
+    # print(res_file, vis_folder, save_folder, timestamp, len(results))
 
 
 def process_frame(sample, model, transform_fn, postprocessors, device, origin_size, res_thr):
